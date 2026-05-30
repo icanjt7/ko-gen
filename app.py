@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import io
+import random
 import sys
 from pathlib import Path
 
@@ -255,24 +256,38 @@ with tab3:
     st.header("민화 스타일 이미지 생성")
     st.caption("MMKG 데이터로 근거를 확인한 뒤 FLUX 모델(pollinations.ai)로 이미지를 생성합니다. API 키 불필요.")
 
-    st.info("워크플로: **상징 근거 확인 → 모티프·상징 선택 → 이미지 생성**")
+    MOTIF_OPTIONS = ["학", "소나무", "모란", "불로초", "해", "구름", "괴석", "대나무",
+                     "매화", "국화", "복숭아", "사슴", "거북", "잉어", "호랑이", "까치"]
+    SYMBOL_OPTIONS = ["불로장생", "장수", "길상", "절개", "부귀", "출세", "벽사",
+                      "화목", "다산", "풍요", "번영", "재복"]
+    GENRE_OPTIONS  = ["화조도", "십장생도", "문자도", "호작도", "어해도", "책거리",
+                      "산수도", "화훼도", "혼성도"]
+
+    # 새로고침마다 랜덤 추천 (세션 내에는 고정)
+    if "rec_motifs" not in st.session_state:
+        st.session_state.rec_motifs  = random.sample(MOTIF_OPTIONS, 3)
+        st.session_state.rec_symbols = random.sample(SYMBOL_OPTIONS, 2)
+        st.session_state.rec_genre   = random.choice(GENRE_OPTIONS)
+
+    st.info(
+        f"✨ **오늘의 추천**: 모티프 `{'·'.join(st.session_state.rec_motifs)}` "
+        f"/ 상징 `{'·'.join(st.session_state.rec_symbols)}` "
+        f"/ 화목 `{st.session_state.rec_genre}`"
+    )
+    st.caption("워크플로: **상징 근거 확인 → 모티프·상징 선택 → 이미지 생성**")
     col1, col2 = st.columns(2)
 
     with col1:
         st.markdown("#### 1단계: 모티프 선택")
-        MOTIF_OPTIONS = ["학", "소나무", "모란", "불로초", "해", "구름", "괴석", "대나무",
-                         "매화", "국화", "복숭아", "사슴", "거북", "잉어", "호랑이", "까치"]
         selected_motifs = st.multiselect("시각 모티프 선택", MOTIF_OPTIONS,
-                                         default=["학", "소나무", "불로초"])
+                                         default=st.session_state.rec_motifs)
         custom_motifs = st.text_input("직접 추가 (쉼표 구분)", placeholder="예: 동자, 구름")
         if custom_motifs:
             selected_motifs += [m.strip() for m in custom_motifs.split(",") if m.strip()]
 
         st.markdown("#### 2단계: 상징 선택")
-        SYMBOL_OPTIONS = ["불로장생", "장수", "길상", "절개", "부귀", "출세", "벽사",
-                          "화목", "다산", "풍요", "번영", "재복"]
         selected_symbols = st.multiselect("표현할 상징", SYMBOL_OPTIONS,
-                                          default=["불로장생", "장수"])
+                                          default=st.session_state.rec_symbols)
         custom_symbols = st.text_input("직접 추가 (쉼표 구분)", placeholder="예: 청렴, 상서로움",
                                        key="sym_custom")
         if custom_symbols:
@@ -280,9 +295,10 @@ with tab3:
 
     with col2:
         st.markdown("#### 3단계: 화목 및 옵션")
-        GENRES = ["화조도", "십장생도", "문자도", "호작도", "어해도", "책거리", "산수도",
-                  "화훼도", "혼성도", ""]
+        GENRES = GENRE_OPTIONS + [""]
+        rec_genre_idx = GENRES.index(st.session_state.rec_genre)
         genre = st.selectbox("화목 선택 (선택사항)", GENRES,
+                             index=rec_genre_idx,
                              format_func=lambda x: x if x else "없음")
         img_size = st.select_slider("이미지 크기", options=[256, 512, 768], value=512)
 
