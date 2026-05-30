@@ -296,9 +296,6 @@ def _build_prompt(motifs: list[str], symbols: list[str], genre: str) -> str:
     return ", ".join(parts)
 
 
-_HF_MODEL = "stabilityai/stable-diffusion-2-1"
-
-
 def generate_minhwa_image(
     motifs: list[str],
     symbols: list[str],
@@ -306,47 +303,32 @@ def generate_minhwa_image(
     output_filename: str = "",
     width: int = 512,
     height: int = 512,
-    hf_token: str = "",
     **_kwargs,
 ) -> dict[str, Any]:
-    """HuggingFace Inference API로 민화 스타일 이미지 생성.
+    """pollinations.ai (FLUX 모델)로 민화 스타일 이미지 생성.
 
-    모델: stabilityai/stable-diffusion-2-1 (공개 접근, 라이선스 불필요)
+    API 키 불필요. 무료 공개 서비스.
     """
-    if not hf_token:
-        return {"error": "HuggingFace token이 필요합니다. Streamlit Cloud → Settings → Secrets에 HF_TOKEN을 추가하세요."}
-
-    prompt = _build_prompt(motifs, symbols, genre)
-
+    import urllib.parse
     import requests
     from PIL import Image as _PIL
 
-    api_url = f"https://api-inference.huggingface.co/models/{_HF_MODEL}"
-    headers = {"Authorization": f"Bearer {hf_token}"}
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "negative_prompt": _NEGATIVE_PROMPT,
-            "width": width,
-            "height": height,
-            "num_inference_steps": 30,
-            "guidance_scale": 7.5,
-        },
-    }
+    prompt = _build_prompt(motifs, symbols, genre)
+    encoded = urllib.parse.quote(prompt)
+    url = (
+        f"https://image.pollinations.ai/prompt/{encoded}"
+        f"?width={width}&height={height}&model=flux&nologo=true&enhance=false"
+    )
 
     try:
-        resp = requests.post(api_url, headers=headers, json=payload, timeout=120)
+        resp = requests.get(url, timeout=120)
     except requests.Timeout:
-        return {"error": "HF API 응답 시간 초과 (120초). 잠시 후 다시 시도하세요."}
+        return {"error": "이미지 생성 시간 초과 (120초). 잠시 후 다시 시도하세요."}
     except Exception as e:
         return {"error": f"네트워크 오류: {str(e)[:300]}"}
 
-    if resp.status_code == 503:
-        return {"error": "모델 로딩 중입니다 (콜드 스타트). 30초 후 다시 시도하세요."}
-    if resp.status_code == 401 or resp.status_code == 403:
-        return {"error": "HF Token 인증 실패. Secrets의 HF_TOKEN 값을 확인하세요."}
     if resp.status_code != 200:
-        return {"error": f"HF API 오류 {resp.status_code}: {resp.text[:300]}"}
+        return {"error": f"이미지 생성 실패 (HTTP {resp.status_code}). 잠시 후 다시 시도하세요."}
 
     try:
         image = _PIL.open(io.BytesIO(resp.content))
@@ -360,9 +342,8 @@ def generate_minhwa_image(
     return {
         "image_bytes": buf,
         "prompt_used": prompt,
-        "negative_prompt": _NEGATIVE_PROMPT,
-        "model": f"{_HF_MODEL} (HF Inference API)",
-        "device": "HuggingFace Cloud",
+        "model": "FLUX (pollinations.ai, 무료)",
+        "device": "Cloud",
         "size": f"{width}x{height}",
         "motifs_input": motifs,
         "symbols_input": symbols,

@@ -49,7 +49,7 @@ h2, h3 { color: #243B53; }
 </style>
 """, unsafe_allow_html=True)
 
-# HF token from secrets
+# HF token (선택사항 — 현재 이미지 생성은 pollinations.ai 사용으로 불필요)
 HF_TOKEN = st.secrets.get("HF_TOKEN", "")
 
 # ── 사이드바 ──────────────────────────────────────────────────────────────────
@@ -76,10 +76,7 @@ with st.sidebar:
 - `minhwa_kg.graphml` — 지식 그래프
 """)
     st.divider()
-    if HF_TOKEN:
-        st.success("HF Token 연결됨 ✓")
-    else:
-        st.warning("HF Token 없음 — 이미지 생성 불가\nSettings → Secrets → HF_TOKEN")
+    st.success("이미지 생성: FLUX (pollinations.ai) ✓")
 
 # ── 탭 ───────────────────────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4 = st.tabs([
@@ -256,18 +253,7 @@ with tab2:
 # ══════════════════════════════════════════════════════════════════════════════
 with tab3:
     st.header("민화 스타일 이미지 생성")
-    st.caption("MMKG 데이터로 근거를 확인한 뒤 HuggingFace Inference API로 이미지를 생성합니다.")
-
-    if not HF_TOKEN:
-        st.warning("""
-**HuggingFace Token이 필요합니다.**
-
-1. https://huggingface.co/settings/tokens 에서 토큰 발급 (무료)
-2. Streamlit Cloud → 앱 Settings → Secrets에 추가:
-   ```
-   HF_TOKEN = "hf_xxxxxxxxxxxxxxxx"
-   ```
-""")
+    st.caption("MMKG 데이터로 근거를 확인한 뒤 FLUX 모델(pollinations.ai)로 이미지를 생성합니다. API 키 불필요.")
 
     st.info("워크플로: **상징 근거 확인 → 모티프·상징 선택 → 이미지 생성**")
     col1, col2 = st.columns(2)
@@ -315,15 +301,14 @@ with tab3:
     st.divider()
 
     if st.button("🎨 이미지 생성", key="gen_btn", type="primary",
-                 disabled=not (selected_motifs and selected_symbols and HF_TOKEN)):
-        with st.spinner("HuggingFace API로 이미지 생성 중… (약 20~40초)"):
+                 disabled=not (selected_motifs and selected_symbols)):
+        with st.spinner("FLUX 모델로 이미지 생성 중… (약 20~40초)"):
             result = generate_minhwa_image(
                 motifs=selected_motifs,
                 symbols=selected_symbols,
                 genre=genre,
                 width=img_size,
                 height=img_size,
-                hf_token=HF_TOKEN,
             )
 
         if "error" in result:
