@@ -318,29 +318,40 @@ def generate_minhwa_image(
 
     prompt = _build_prompt(motifs, symbols, genre)
 
-    try:
-        from huggingface_hub import InferenceClient
-    except ImportError:
-        return {"error": "huggingface_hub 패키지가 없습니다. requirements.txt에 추가 후 재배포하세요."}
+    import requests
+    from PIL import Image as _PIL
+
+    api_url = f"https://api-inference.huggingface.co/models/{_HF_MODEL}"
+    headers = {"Authorization": f"Bearer {hf_token}"}
+    payload = {
+        "inputs": prompt,
+        "parameters": {
+            "negative_prompt": _NEGATIVE_PROMPT,
+            "width": width,
+            "height": height,
+            "num_inference_steps": 30,
+            "guidance_scale": 7.5,
+        },
+    }
 
     try:
-        client = InferenceClient(token=hf_token)
-        image = client.text_to_image(
-            prompt,
-            model=_HF_MODEL,
-            negative_prompt=_NEGATIVE_PROMPT,
-            width=width,
-            height=height,
-            num_inference_steps=30,
-            guidance_scale=7.5,
-        )
+        resp = requests.post(api_url, headers=headers, json=payload, timeout=120)
+    except requests.Timeout:
+        return {"error": "HF API 응답 시간 초과 (120초). 잠시 후 다시 시도하세요."}
     except Exception as e:
-        err = str(e)
-        if "503" in err or "loading" in err.lower():
-            return {"error": "모델 로딩 중입니다 (콜드 스타트). 30초 후 다시 시도하세요."}
-        if "401" in err or "403" in err or "authorization" in err.lower():
-            return {"error": f"HF Token 인증 실패. 토큰을 확인하세요. ({err[:200]})"}
-        return {"error": f"이미지 생성 오류: {err[:300]}"}
+        return {"error": f"네트워크 오류: {str(e)[:300]}"}
+
+    if resp.status_code == 503:
+        return {"error": "모델 로딩 중입니다 (콜드 스타트). 30초 후 다시 시도하세요."}
+    if resp.status_code == 401 or resp.status_code == 403:
+        return {"error": "HF Token 인증 실패. Secrets의 HF_TOKEN 값을 확인하세요."}
+    if resp.status_code != 200:
+        return {"error": f"HF API 오류 {resp.status_code}: {resp.text[:300]}"}
+
+    try:
+        image = _PIL.open(io.BytesIO(resp.content))
+    except Exception as e:
+        return {"error": f"이미지 파싱 실패: {e}"}
 
     buf = io.BytesIO()
     image.save(buf, format="PNG")
