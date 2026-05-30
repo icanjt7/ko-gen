@@ -296,6 +296,9 @@ def _build_prompt(motifs: list[str], symbols: list[str], genre: str) -> str:
     return ", ".join(parts)
 
 
+_HF_MODEL = "stabilityai/stable-diffusion-2-1"
+
+
 def generate_minhwa_image(
     motifs: list[str],
     symbols: list[str],
@@ -306,44 +309,39 @@ def generate_minhwa_image(
     hf_token: str = "",
     **_kwargs,
 ) -> dict[str, Any]:
-    """HuggingFace Inference API로 민화 스타일 이미지 생성."""
-    import requests
-    import datetime
+    """HuggingFace Inference API로 민화 스타일 이미지 생성.
 
+    모델: stabilityai/stable-diffusion-2-1 (공개 접근, 라이선스 불필요)
+    """
     if not hf_token:
         return {"error": "HuggingFace token이 필요합니다. Streamlit Cloud → Settings → Secrets에 HF_TOKEN을 추가하세요."}
 
     prompt = _build_prompt(motifs, symbols, genre)
-    api_url = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
-    headers = {"Authorization": f"Bearer {hf_token}"}
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "negative_prompt": _NEGATIVE_PROMPT,
-            "width": width,
-            "height": height,
-            "num_inference_steps": 30,
-            "guidance_scale": 7.5,
-        },
-    }
 
     try:
-        resp = requests.post(api_url, headers=headers, json=payload, timeout=120)
-    except requests.Timeout:
-        return {"error": "HF API 응답 시간 초과 (120초). 잠시 후 다시 시도하세요."}
+        from huggingface_hub import InferenceClient
+    except ImportError:
+        return {"error": "huggingface_hub 패키지가 없습니다. requirements.txt에 추가 후 재배포하세요."}
 
-    if resp.status_code == 503:
-        return {"error": "모델 로딩 중입니다 (콜드 스타트). 20~30초 후 다시 시도하세요."}
-    if resp.status_code != 200:
-        return {"error": f"HF API 오류 {resp.status_code}: {resp.text[:300]}"}
-
-    from PIL import Image as _PIL
     try:
-        image = _PIL.open(io.BytesIO(resp.content))
+        client = InferenceClient(token=hf_token)
+        image = client.text_to_image(
+            prompt,
+            model=_HF_MODEL,
+            negative_prompt=_NEGATIVE_PROMPT,
+            width=width,
+            height=height,
+            num_inference_steps=30,
+            guidance_scale=7.5,
+        )
     except Exception as e:
-        return {"error": f"이미지 파싱 실패: {e}"}
+        err = str(e)
+        if "503" in err or "loading" in err.lower():
+            return {"error": "모델 로딩 중입니다 (콜드 스타트). 30초 후 다시 시도하세요."}
+        if "401" in err or "403" in err or "authorization" in err.lower():
+            return {"error": f"HF Token 인증 실패. 토큰을 확인하세요. ({err[:200]})"}
+        return {"error": f"이미지 생성 오류: {err[:300]}"}
 
-    # In-memory bytes for Streamlit display
     buf = io.BytesIO()
     image.save(buf, format="PNG")
     buf.seek(0)
@@ -352,7 +350,7 @@ def generate_minhwa_image(
         "image_bytes": buf,
         "prompt_used": prompt,
         "negative_prompt": _NEGATIVE_PROMPT,
-        "model": "runwayml/stable-diffusion-v1-5 (HF API)",
+        "model": f"{_HF_MODEL} (HF Inference API)",
         "device": "HuggingFace Cloud",
         "size": f"{width}x{height}",
         "motifs_input": motifs,
